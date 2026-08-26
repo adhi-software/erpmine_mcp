@@ -200,7 +200,7 @@ class ErpmineMcpHook < Redmine::Hook::Listener
     ['create_sales_quote', :post, '/wksalesquote/update.json',
      'Issue a sales quote. body is the same shape as create_invoice — {"inv_date", "parent_type" ("WkAccount", "WkCrmContact" or "WkLead"), "parent_id", "inv_number", "field_status": "o", "description", "invoiceItems": {"1": {...}}}.'],
     ['update_sales_quote', :post, '/wksalesquote/update.json',
-     'Update a sales quote. body {"invoice_id", "saved_field_status", ...same fields as create_sales_quote, with each line carrying its "item_id"}. Send every line — omitted ones are deleted.'],
+     'Update a sales quote. body {"invoice_id", "saved_field_status", ...same fields as create_sales_quote, with each line carrying its "item_id"}. Send every line — omitted ones are deleted. original_currency cannot be changed on an existing line.'],
 
     # --- Billing — invoices (wkinvoice) ---------------------------------
     ['list_invoices', :get, '/wkinvoice.json',
@@ -208,9 +208,9 @@ class ErpmineMcpHook < Redmine::Hook::Listener
     ['get_invoice', :get, '/wkinvoice/edit.json',
      'Get one invoice with its line items and editable fields. query: invoice_id.'],
     ['create_invoice', :post, '/wkinvoice/update.json',
-     'Create an invoice. First call list_account_projects for the parent and put one of its project_id values on every line item; if it returns nothing, do not create the invoice. inv_start_date and inv_end_date are required — ask the caller for the period if they did not give one. Resolve parent_id with list_crm_accounts or list_crm_contacts; nothing is validated server-side. body {"inv_date", "inv_start_date", "inv_end_date", "parent_type": "WkAccount", "parent_id": <account id>, "inv_number", "field_status": "o", "description", "invoiceItems": {"1": {"name", "quantity", "rate", "item_type", "project_id", "original_currency"}}}. invoiceItems is keyed by row number starting at "1". field_status: o open, c closed. item_type: i billable issue/time, e expense, m material, a asset, c credit.'],
+     'Create an invoice. First call list_account_projects for the parent and put one of its project_id values on every line item; if it returns nothing, do not create the invoice. inv_start_date and inv_end_date are required — ask the caller for the period if they did not give one. Resolve parent_id with list_crm_accounts or list_crm_contacts; nothing is validated server-side. body {"inv_date", "inv_start_date", "inv_end_date", "parent_type": "WkAccount", "parent_id": <account id>, "inv_number", "field_status": "o", "description", "invoiceItems": {"1": {"name", "quantity", "rate", "item_type", "project_id", "original_currency"}}}. invoiceItems is keyed by row number starting at "1". original_currency is the same on every line: settings.wktime_currency from get_my_erp_permissions. field_status: o open, c closed. item_type: i billable issue/time, e expense, m material, a asset, c credit.'],
     ['update_invoice', :post, '/wkinvoice/update.json',
-     'Update an invoice. body {"invoice_id", "saved_field_status" (the status from get_invoice), "field_status", "inv_date", "inv_number", "description", "invoiceItems": {"1": {"item_id" (existing line id), "name", "quantity", "rate", "hd_item_type", "project_id"}}}. Line items omitted from invoiceItems are deleted, so send every row. An invoice that has payments or credit notes against it cannot be changed.'],
+     'Update an invoice. body {"invoice_id", "saved_field_status" (the status from get_invoice), "field_status", "inv_date", "inv_number", "description", "invoiceItems": {"1": {"item_id" (existing line id), "name", "quantity", "rate", "hd_item_type", "project_id"}}}. Line items omitted from invoiceItems are deleted, so send every row. original_currency cannot be changed on an existing line. An invoice that has payments or credit notes against it cannot be changed.'],
     ['export_invoice', :get, '/wkinvoice/export.csv',
      'Get one invoice as CSV — its header, the billed-to account and every line item, laid out as the printed invoice. query: invoice_id. Returns raw CSV text rather than JSON; use get_invoice when you need the fields as data.'],
 
@@ -218,9 +218,9 @@ class ErpmineMcpHook < Redmine::Hook::Listener
     ['list_payments', :get, '/wkpayment.json',
      'List payments received against invoices. query: period_type, period, from, to, account_id, contact_id, offset, limit.'],
     ['get_payment', :get, '/wkpayment/edit.json',
-     'Get one payment with its allocations to invoices and editable fields. query: payment_id.'],
+     'Get one payment with its allocations to invoices and editable fields. query: payment_id. Pass load_payment=true with related_to/related_parent instead to list an account\'s still-unpaid invoices when composing a new payment. Each row carries invoice_id and invoice_org_currency for create_payment.'],
     ['create_payment', :post, '/wkpayment/update.json',
-     'Record a payment and allocate it across invoices. body {"payment_date", "payment_type_id", "reference_number", "description", "related_to": "WkAccount", "related_parent": <account id>, "tot_pay_amount", "payment_entries": [{"invoice_id", "amount", "invoice_org_currency"}]}.'],
+     'Record a payment and allocate it across invoices. body {"payment_date", "payment_type_id", "reference_number", "description", "related_to": "WkAccount", "related_parent": <account id>, "tot_pay_amount", "payment_entries": [{"invoice_id", "amount", "invoice_org_currency"}]}. Take payment_type_id from list_crm_enumerations with enum_type=PT. Take invoice_id and invoice_org_currency from get_payment with load_payment=true — the invoice\'s own currency, not the base currency setting.'],
     ['update_payment', :post, '/wkpayment/update.json',
      'Update a payment and its invoice allocations. body {"payment_id", ...same fields as create_payment, with each payment_entries row carrying its "payment_item_id"}. Send every allocation row — an amount of 0 removes that allocation.'],
 
@@ -258,9 +258,9 @@ class ErpmineMcpHook < Redmine::Hook::Listener
     ['get_supplier_quote', :get, '/wkquote/edit.json',
      'Get one supplier quote with its line items. query: invoice_id.'],
     ['create_supplier_quote', :post, '/wkquote/update.json',
-     'Create a supplier quote. rfq_id is required — take it from list_rfqs; without it the quote is linked to RFQ 0. inv_start_date and inv_end_date are required. Supplier is parent_type "WkAccount" with an id from list_supplier_accounts, or "WkCrmContact" from list_supplier_contacts — check it exists, nothing is validated server-side. body {"inv_date", "inv_start_date", "inv_end_date", "parent_type": "WkAccount", "parent_id": <supplier account id>, "inv_number", "field_status": "o", "description", "rfq_id", "invoiceItems": {"1": {"name", "quantity", "rate", "item_type", "project_id", "original_currency"}}}. field_status and item_type codes are as in create_invoice.'],
+     'Create a supplier quote. rfq_id is required — take it from list_rfqs; without it the quote is linked to RFQ 0. inv_start_date and inv_end_date are required. Supplier is parent_type "WkAccount" with an id from list_supplier_accounts, or "WkCrmContact" from list_supplier_contacts — check it exists, nothing is validated server-side. body {"inv_date", "inv_start_date", "inv_end_date", "parent_type": "WkAccount", "parent_id": <supplier account id>, "inv_number", "field_status": "o", "description", "rfq_id", "invoiceItems": {"1": {"name", "quantity", "rate", "item_type", "project_id", "original_currency"}}}. original_currency, field_status and item_type are as in create_invoice.'],
     ['update_supplier_quote', :post, '/wkquote/update.json',
-     'Update a supplier quote. body {"invoice_id", "saved_field_status", ...same fields as create_supplier_quote, with each line carrying its "item_id"}. Lines omitted from invoiceItems are deleted, so send every row.'],
+     'Update a supplier quote. body {"invoice_id", "saved_field_status", ...same fields as create_supplier_quote, with each line carrying its "item_id"}. Lines omitted from invoiceItems are deleted, so send every row. original_currency cannot be changed on an existing line.'],
 
     # --- Purchasing — purchase orders (wkpurchaseorder) -----------------
     ['list_purchase_orders', :get, '/wkpurchaseorder.json',
@@ -270,7 +270,7 @@ class ErpmineMcpHook < Redmine::Hook::Listener
     ['create_purchase_order', :post, '/wkpurchaseorder/update.json',
      'Raise a purchase order, standalone or against a winning quote. body is the same shape as create_supplier_quote. invoiceItems is required — build the rows yourself; rfq_id and quote_id do not populate them over the API. po_quote_id from list_supplier_quotes links a quote; omit it for a standalone order. inv_start_date and inv_end_date are required. Supplier is parent_type "WkAccount" with an id from list_supplier_accounts, or "WkCrmContact" from list_supplier_contacts — check it exists, nothing is validated server-side.'],
     ['update_purchase_order', :post, '/wkpurchaseorder/update.json',
-     'Update a purchase order. body {"invoice_id", "saved_field_status", ...same fields as create_purchase_order, with each line carrying its "item_id"}. Send every line — omitted ones are deleted.'],
+     'Update a purchase order. body {"invoice_id", "saved_field_status", ...same fields as create_purchase_order, with each line carrying its "item_id"}. Send every line — omitted ones are deleted. original_currency cannot be changed on an existing line.'],
 
     # --- Purchasing — supplier invoices (wksupplierinvoice) -------------
     ['list_supplier_invoices', :get, '/wksupplierinvoice.json',
@@ -280,7 +280,7 @@ class ErpmineMcpHook < Redmine::Hook::Listener
     ['create_supplier_invoice', :post, '/wksupplierinvoice/update.json',
      'Record a supplier invoice, standalone or against a purchase order. body is the same shape as create_supplier_quote. invoiceItems is required — build the rows yourself; po_id does not populate them over the API. si_inv_id from list_purchase_orders links an order; omit it for a standalone invoice. inv_start_date and inv_end_date are required. Supplier is parent_type "WkAccount" with an id from list_supplier_accounts, or "WkCrmContact" from list_supplier_contacts — check it exists, nothing is validated server-side.'],
     ['update_supplier_invoice', :post, '/wksupplierinvoice/update.json',
-     'Update a supplier invoice. body {"invoice_id", "saved_field_status", ...same fields as create_supplier_invoice, with each line carrying its "item_id"}. Send every line — omitted ones are deleted.'],
+     'Update a supplier invoice. body {"invoice_id", "saved_field_status", ...same fields as create_supplier_invoice, with each line carrying its "item_id"}. Send every line — omitted ones are deleted. original_currency cannot be changed on an existing line.'],
 
     # --- Purchasing — supplier payments (wksupplierpayment) -------------
     ['list_supplier_payments', :get, '/wksupplierpayment.json',
@@ -364,7 +364,7 @@ class ErpmineMcpHook < Redmine::Hook::Listener
     ['get_survey_result', :get, '/wksurvey/:id/survey_result.json',
      'Get one survey\'s aggregated results — answer counts per question and the free-text answers. query: survey_id (the same value as the :id path parameter, required), surveyForType, groupName.'],
     ['create_survey', :post, '/wksurvey/save_survey.json',
-     'Create a survey definition. body {"wksurvey": {"name", "status", "survey_for_type", "survey_for_id", "group_id", "recur", "recur_every", "is_review", "use_points", "wk_survey_que_groups_attributes"}}. status is N, O, C or A. survey_for_type is Project, WkAccount, WkCrmContact or User only — for a user group send group_id (its id from list_groups) and no survey_for_type. Questions go inside groups, never at survey level; name the group as the caller asked, or "" for the ungrouped section. A group takes name, sort_order and wk_survey_questions_attributes; a question takes name, question_type, is_mandatory, sort_order and wk_survey_choices_attributes; a choice takes name and points. Every *_attributes collection is an object keyed "0", "1", "2" — arrays fail. Group sort_order is numeric; question sort_order is an unpadded integer string that sorts as text past nine, and goes last when omitted. Omit "wksurvey": {"id"} to create.'],
+     'Create a survey definition. body {"wksurvey": {"name", "status", "survey_for_type", "survey_for_id", "group_id", "recur", "recur_every", "is_review", "use_points", "wk_survey_que_groups_attributes"}}. status is N, O, C or A. survey_for_type is Project, WkAccount, WkCrmContact or User only. survey_for_id targets one record of that type; leave it blank to target every one. Omit both to target nothing. For a user group send group_id (its id from list_groups) and no survey_for_type. Questions go inside groups, never at survey level; name the group as the caller asked, or "" for the ungrouped section. A group takes name, sort_order and wk_survey_questions_attributes; a question takes name, question_type, is_mandatory, sort_order and wk_survey_choices_attributes; a choice takes name and points. Every *_attributes collection is an object keyed "0", "1", "2" — arrays fail. Group sort_order is numeric; question sort_order is an unpadded integer string that sorts as text past nine, and goes last when omitted. Omit "wksurvey": {"id"} to create.'],
     ['update_survey', :post, '/wksurvey/save_survey.json',
      'Update a survey definition. Same body as create_survey plus "wksurvey": {"id"}; each existing group, question and choice carries its own "id", and "_destroy": "1" removes one. Edit only while status is N — on O, C or A send nothing but the status field. To add a question to an existing section send that group with its "id"; a group without an "id" becomes a new section, and "id": 0 is not a group. Same shape and sort_order rules as create_survey.'],
     ['submit_survey_response', :post, '/wksurvey/update_survey.json',
@@ -452,7 +452,7 @@ class ErpmineMcpHook < Redmine::Hook::Listener
     ['list_products', :get, '/wklogmaterial/modify_product_dd.json',
      'List inventory dropdowns, as value/label pairs. query: ptype, id, log_type. Chain: ptype=product with log_type=M gives a product id; ptype=product_item with that id and log_type=I gives inventory_item_id; ptype=inventory_item and ptype=uom_id with inventory_item_id give available_quantity, selling_price and uom_id. For assets pass log_type=A throughout.'],
     ['search_survey_targets', :get, '/wksurvey/find_survey_for.json',
-     'Search the records a survey can be attached to, as id/label pairs. query: surveyFor ("Project", "WkAccount", "WkCrmContact", "User", …), surveyForID (an id, or a search term with method=search), method. Resolves survey_for_type and survey_for_id for create_survey.']
+     'Search the records a survey can be attached to, as id/label pairs. query: surveyFor ("Project", "WkAccount", "WkCrmContact", "User", …), surveyForID (an id, or a search term with method=search), method. Resolves survey_for_type and survey_for_id for create_survey. Only needed when targeting one record; a blank survey_for_id covers all of a type.']
   ].freeze
 
   # Hook entry point. redmine_mcp's catalogue merges the returned rows.
