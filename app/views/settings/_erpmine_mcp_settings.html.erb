@@ -1,0 +1,28 @@
+<%# The ERPmine tools in ErpmineMcpHook are contributed to redmine_mcp through a
+    hook, so they are exposed only while that plugin is installed. This row says
+    whether it is — the same indicator redmine_agent shows for the same plugin. %>
+<p>
+  <label><strong><%= l(:label_redmine_mcp) %></strong></label>
+  <% if Redmine::Plugin.installed?(:redmine_mcp) %>
+    <span class="erpmine-mcp-status-ok"><%= sprite_icon('checked') %></span>
+    <strong><%= l(:label_installed) %></strong>
+  <% else %>
+    <span class="erpmine-mcp-status-bad">
+      <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M18 6 L6 18 M6 6 L18 18"/>
+      </svg>
+    </span>
+    <%= l(:label_not_installed) %>
+  <% end %></br>
+  <%= l(:label_erpmine_mcp_hint) %>
+</p>
+
+<style type="text/css">
+  .erpmine-mcp-status-ok  .icon-svg,
+  .erpmine-mcp-status-bad .icon-svg { width: 1.5rem; height: 1.5rem; vertical-align: middle; stroke-width: 2.5; }
+  .erpmine-mcp-status-ok  .icon-svg { stroke: #28a745; stroke-width: 4.5; }
+  .erpmine-mcp-status-bad .icon-svg { stroke: #dc3545; stroke-width: 4.5; }
+
+  /* The page only reports status, so there is nothing to save. */
+  input[name="commit"] { display: none; }
+</style>

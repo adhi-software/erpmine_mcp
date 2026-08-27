@@ -1,0 +1,5 @@
+en:
+  label_redmine_mcp: Redmine MCP
+  label_installed: Installed
+  label_not_installed: Not Installed
+  label_erpmine_mcp_hint: "Note: Redmine MCP plugin is required to use ERPmine MCP."
