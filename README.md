@@ -14,7 +14,7 @@ A Redmine plugin that provides access to ERPmine data through the MCP tool.
 
 | ERPmine Version | Plugin Version |
 |-----------------|----------------|
-| 7.0.x            | 1.0           |
+| 5.1.1            | 1.0           |
 
 ---
 
