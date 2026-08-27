@@ -22,7 +22,7 @@ A Redmine plugin that provides access to ERPmine data through the MCP tool.
 
 - **Features**
   ```text
-   - Supports list and get tools for the ERPmine modules.
+   - Supports get, create, and update tools for the ERPmine modules.
   ```
 ---
 
